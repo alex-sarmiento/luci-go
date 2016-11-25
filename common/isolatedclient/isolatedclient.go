@@ -156,6 +156,35 @@ func (i *Client) Push(c context.Context, state *PushState, source Source) (err e
 	return
 }
 
+// Fetch downloads an item from the server.
+func (i *Client) Fetch(c context.Context, item *isolateservice.HandlersEndpointsV1Digest) ([]byte, error) {
+	// Perform initial request.
+	url := i.url + "/api/isolateservice/v1/retrieve"
+	in := &isolateservice.HandlersEndpointsV1RetrieveRequest{
+		Digest: item.Digest,
+		Namespace: &isolateservice.HandlersEndpointsV1Namespace{
+			Compression: "flate",
+			DigestHash:  "sha-1",
+			Namespace:   i.namespace,
+		},
+		Offset: 0,
+	}
+	var out isolateservice.HandlersEndpointsV1RetrievedContent
+	if _, err := lhttp.PostJSON(c, i.retryFactory, i.authClient, url, nil, in, &out); err != nil {
+		return nil, err
+	}
+	// Handle DB items.
+	if out.Content != "" {
+		return base64.StdEncoding.DecodeString(out.Content)
+	}
+	// Handle GCS items.
+	var data []byte
+	if _, err := lhttp.GetBinary(c, i.retryFactory, i.authClient, out.Url, true, &data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 // postJSON does authenticated POST request.
 func (i *Client) postJSON(c context.Context, resource string, headers map[string]string, in, out interface{}) error {
 	if len(resource) == 0 || resource[0] != '/' {

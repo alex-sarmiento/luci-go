@@ -6,9 +6,11 @@ package lhttp
 
 import (
 	"bytes"
+	"compress/zlib"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -148,4 +150,28 @@ func PostJSON(ctx context.Context, rFn retry.Factory, c *http.Client, url string
 		return 0, err
 	}
 	return req()
+}
+
+// GetBinary makes a GET request for binary (application/octet-stream) data and
+// returns the HTTP status code and error (if any). Optionally, decompresses the response.
+func GetBinary(ctx context.Context, rFn retry.Factory, c *http.Client, url string, unzip bool, out *[]byte) (int, error) {
+	rgen := func() (*http.Request, error) {
+		return http.NewRequest("GET", url, nil)
+	}
+	handler := func(resp *http.Response) error {
+		defer resp.Body.Close()
+		var err error
+		if unzip {
+			zipReader, err := zlib.NewReader(resp.Body)
+			defer zipReader.Close()
+			if err != nil {
+				return err
+			}
+			*out, err = ioutil.ReadAll(zipReader)
+		} else {
+			*out, err = ioutil.ReadAll(resp.Body)
+		}
+		return err
+	}
+	return NewRequest(ctx, c, rFn, rgen, handler)()
 }

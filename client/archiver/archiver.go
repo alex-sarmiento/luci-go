@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"sync"
 	"time"
@@ -114,9 +113,9 @@ func New(c *isolatedclient.Client, out io.Writer) *Archiver {
 		canceler:              common.NewCanceler(),
 		progress:              progress.New(headers, out),
 		c:                     c,
-		maxConcurrentHash:     5,
+		maxConcurrentHash:     16,
 		maxConcurrentContains: 64,
-		maxConcurrentUpload:   8,
+		maxConcurrentUpload:   32,
 		containsBatchingDelay: 100 * time.Millisecond,
 		containsBatchSize:     50,
 		stage1DedupeChan:      make(chan *Item),
@@ -608,7 +607,7 @@ func (a *Archiver) doContains(items []*Item) {
 			a.stage4UploadChan <- items[index]
 		}
 	}
-	log.Printf("Looked up %d items\n", len(items))
+	//log.Printf("Looked up %d items\n", len(items))
 }
 
 // doUpload is called by stage 4.
@@ -628,5 +627,5 @@ func (a *Archiver) doUpload(item *Item) {
 	a.statsLock.Lock()
 	a.stats.Pushed = append(a.stats.Pushed, u)
 	a.statsLock.Unlock()
-	log.Printf("Uploaded %7s: %s\n", size, item.DisplayName)
+	//log.Printf("Uploaded %7s: %s\n", size, item.DisplayName)
 }
