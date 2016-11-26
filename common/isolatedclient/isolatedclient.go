@@ -6,6 +6,7 @@ package isolatedclient
 
 import (
 	"bytes"
+	"compress/zlib"
 	"encoding/base64"
 	"errors"
 	"io"
@@ -160,10 +161,14 @@ func (i *Client) Push(c context.Context, state *PushState, source Source) (err e
 func (i *Client) Fetch(c context.Context, item *isolateservice.HandlersEndpointsV1Digest) ([]byte, error) {
 	// Perform initial request.
 	url := i.url + "/api/isolateservice/v1/retrieve"
+	compression := ""
+	if strings.HasSuffix(i.namespace, "-gzip") || strings.HasSuffix(i.namespace, "-flate") {
+		compression = "flate"
+	}
 	in := &isolateservice.HandlersEndpointsV1RetrieveRequest{
 		Digest: item.Digest,
 		Namespace: &isolateservice.HandlersEndpointsV1Namespace{
-			Compression: "flate",
+			Compression: compression,
 			DigestHash:  "sha-1",
 			Namespace:   i.namespace,
 		},
@@ -175,7 +180,20 @@ func (i *Client) Fetch(c context.Context, item *isolateservice.HandlersEndpoints
 	}
 	// Handle DB items.
 	if out.Content != "" {
-		return base64.StdEncoding.DecodeString(out.Content)
+		decoded, err := base64.StdEncoding.DecodeString(out.Content)
+		if err != nil {
+			return nil, err
+		}
+		zipReader, err := zlib.NewReader(bytes.NewReader(decoded))
+		defer zipReader.Close()
+		if err != nil {
+			return nil, err
+		}
+		data, err := ioutil.ReadAll(zipReader)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
 	}
 	// Handle GCS items.
 	var data []byte
